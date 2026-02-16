@@ -1,0 +1,285 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/energy-tracker
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Stage 1: Linting
+  lint:
+    name: Code Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort
+
+      - name: Run Black (code formatting)
+        run: black --check app/ tests/ run.py
+
+      - name: Run isort (import sorting)
+        run: isort --check-only app/ tests/ run.py
+
+      - name: Run Flake8 (style guide)
+        run: flake8 app/ tests/ run.py --max-line-length=100 --extend-ignore=E203,W503
+
+  # Stage 2: Security Scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit safety
+
+      - name: Run Bandit (code security)
+        run: bandit -r app/ -f json -o bandit-report.json || true
+
+      - name: Run Safety (dependency check)
+        run: safety check --json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+
+  # Stage 3: Unit Tests
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: security
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term
+
+      - name: Check coverage threshold
+        run: |
+          coverage report --fail-under=80
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  # Stage 4 & 5: Build and Push Docker Image
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
+
+  # Stage 6: Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: http://${{ secrets.EC2_HOST }}:5001
+    steps:
+      - name: Deploy to EC2 Staging
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Pull latest image
+            docker pull ${{ env.DOCKER_IMAGE }}:develop
+            
+            # Stop and remove old container
+            docker stop energy-tracker-staging || true
+            docker rm energy-tracker-staging || true
+            
+            # Run new container
+            docker run -d \
+              --name energy-tracker-staging \
+              -p 5001:5000 \
+              -e FLASK_ENV=development \
+              -e DEBUG=True \
+              -e DATABASE=/app/data/staging.db \
+              -e PORT=5000 \
+              -v /home/ubuntu/data/staging:/app/data \
+              --restart unless-stopped \
+              ${{ env.DOCKER_IMAGE }}:develop
+            
+            # Wait for container to be healthy
+            sleep 10
+
+      - name: Health Check
+        run: |
+          curl -f http://${{ secrets.EC2_HOST }}:5001/health || exit 1
+
+  # Stage 6: Deploy to Production (with manual approval)
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: http://${{ secrets.EC2_HOST }}:5000
+    steps:
+      - name: Deploy to EC2 Production
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Pull latest image
+            docker pull ${{ env.DOCKER_IMAGE }}:main
+            
+            # Backup current container (for rollback)
+            docker tag ${{ env.DOCKER_IMAGE }}:main ${{ env.DOCKER_IMAGE }}:main-backup || true
+            
+            # Stop and remove old container
+            docker stop energy-tracker-production || true
+            docker rm energy-tracker-production || true
+            
+            # Run new container
+            docker run -d \
+              --name energy-tracker-production \
+              -p 5000:5000 \
+              -e FLASK_ENV=production \
+              -e DEBUG=False \
+              -e DATABASE=/app/data/production.db \
+              -e PORT=5000 \
+              -v /home/ubuntu/data/production:/app/data \
+              --restart unless-stopped \
+              ${{ env.DOCKER_IMAGE }}:main
+            
+            # Wait for container to be healthy
+            sleep 10
+
+      - name: Health Check
+        id: health_check
+        run: |
+          curl -f http://${{ secrets.EC2_HOST }}:5000/health || exit 1
+
+      - name: Rollback on Failure
+        if: failure() && steps.health_check.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Stop failed container
+            docker stop energy-tracker-production || true
+            docker rm energy-tracker-production || true
+            
+            # Restore from backup
+            docker run -d \
+              --name energy-tracker-production \
+              -p 5000:5000 \
+              -e FLASK_ENV=production \
+              -e DEBUG=False \
+              -e DATABASE=/app/data/production.db \
+              -e PORT=5000 \
+              -v /home/ubuntu/data/production:/app/data \
+              --restart unless-stopped \
+              ${{ env.DOCKER_IMAGE }}:main-backup
+            
+            echo "Deployment failed. Rolled back to previous version."
+            exit 1
+
+  # Stage 8: Notify on Completion
+  notify:
+    name: Notification
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    steps:
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.deploy-staging.result }}" == "success" ] || [ "${{ needs.deploy-production.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+            exit 1
+          fi

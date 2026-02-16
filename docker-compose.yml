@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Staging environment
+  staging:
+    build: .
+    container_name: energy-tracker-staging
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=True
+      - DATABASE=/app/data/staging.db
+      - PORT=5000
+    volumes:
+      - ./data/staging:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # Production environment
+  production:
+    build: .
+    container_name: energy-tracker-production
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - DEBUG=False
+      - DATABASE=/app/data/production.db
+      - PORT=5000
+    volumes:
+      - ./data/production:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  staging-data:
+  production-data:

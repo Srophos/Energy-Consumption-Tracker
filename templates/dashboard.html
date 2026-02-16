@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Energy Tracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>📊 Energy Dashboard</h2>
+    <p>Monthly consumption overview and bill calculation</p>
+</div>
+
+<div class="month-selector">
+    <form method="GET" action="{{ url_for('main.dashboard') }}">
+        <div class="selector-group">
+            <label for="month">Month:</label>
+            <select id="month" name="month" onchange="this.form.submit()">
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if m == month %}selected{% endif %}>
+                        {{ ['January', 'February', 'March', 'April', 'May', 'June', 
+                            'July', 'August', 'September', 'October', 'November', 'December'][m-1] }}
+                    </option>
+                {% endfor %}
+            </select>
+
+            <label for="year">Year:</label>
+            <select id="year" name="year" onchange="this.form.submit()">
+                {% for y in range(2024, 2027) %}
+                    <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+</div>
+
+<div class="summary-cards">
+    <div class="summary-card">
+        <div class="card-icon">⚡</div>
+        <div class="card-content">
+            <h3>Total Consumption</h3>
+            <p class="card-value">{{ "%.2f"|format(total_kwh) }} kWh</p>
+        </div>
+    </div>
+
+    <div class="summary-card">
+        <div class="card-icon">💰</div>
+        <div class="card-content">
+            <h3>Billing Rate</h3>
+            <p class="card-value">{{ format_currency(rate_per_kwh) }}/kWh</p>
+        </div>
+    </div>
+
+    <div class="summary-card highlight">
+        <div class="card-icon">💵</div>
+        <div class="card-content">
+            <h3>Total Bill</h3>
+            <p class="card-value">{{ format_currency(total_bill) }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>{{ month_name }} {{ year }} - Detailed Entries</h3>
+    
+    {% if entries %}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Appliance</th>
+                        <th>Power (W)</th>
+                        <th>Hours Used</th>
+                        <th>Energy (kWh)</th>
+                        <th>Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td>{{ entry.date }}</td>
+                        <td><strong>{{ entry.appliance }}</strong></td>
+                        <td>{{ entry.power_watts }}W</td>
+                        <td>{{ "%.1f"|format(entry.hours_used) }}h</td>
+                        <td>{{ "%.2f"|format(entry.energy_kwh) }}</td>
+                        <td>{{ format_currency(entry.energy_kwh * rate_per_kwh) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="4"><strong>Total</strong></td>
+                        <td><strong>{{ "%.2f"|format(total_kwh) }} kWh</strong></td>
+                        <td><strong>{{ format_currency(total_bill) }}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h3>No entries found</h3>
+            <p>No energy consumption data for {{ month_name }} {{ year }}</p>
+            <a href="{{ url_for('main.daily_entry') }}" class="btn btn-primary">Add Entry</a>
+        </div>
+    {% endif %}
+</div>
+
+<div class="actions-footer">
+    <a href="{{ url_for('main.daily_entry') }}" class="btn btn-primary">+ Add New Entry</a>
+</div>
+{% endblock %}

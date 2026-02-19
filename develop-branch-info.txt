@@ -1,0 +1,13 @@
+Develop Branch Information
+
+This branch is created to implement the Git Branch Strategy for the Energy Consumption Tracker project.
+
+Purpose of develop branch:
+- Used for integration and testing
+- Feature branches will be merged into develop
+- After testing, develop will be merged into main
+
+Branch workflow:
+feature → develop → main
+
+Created by: sujal-ambeldkar

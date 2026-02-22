@@ -159,7 +159,7 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     environment:
       name: staging
-      url: http://${{ secrets.AZURE_VM_HOST_HOST }}:5001
+      url: http://${{ secrets.AZURE_VM_HOST }}:5001
     steps:
       - name: Deploy to Azure Staging
         uses: appleboy/ssh-action@v1.0.0

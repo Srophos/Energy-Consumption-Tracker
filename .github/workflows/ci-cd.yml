@@ -164,9 +164,9 @@ jobs:
       - name: Deploy to EC2 Staging
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
             # Pull latest image
             docker pull ${{ env.DOCKER_IMAGE }}:develop
@@ -207,9 +207,9 @@ jobs:
       - name: Deploy to EC2 Production
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
             # Pull latest image
             docker pull ${{ env.DOCKER_IMAGE }}:main
@@ -245,9 +245,9 @@ jobs:
         if: failure() && steps.health_check.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
             # Stop failed container
             docker stop energy-tracker-production || true

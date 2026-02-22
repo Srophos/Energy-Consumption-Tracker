@@ -15,7 +15,6 @@ from .models import (
     add_energy_entry,
     get_current_rate,
     get_monthly_entries,
-    update_billing_rate,
 )
 from .utils import (
     calculate_monthly_bill,

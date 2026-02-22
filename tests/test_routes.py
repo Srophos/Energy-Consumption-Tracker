@@ -2,7 +2,6 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime
 
 from app import create_app
 from app.models import add_energy_entry, init_db

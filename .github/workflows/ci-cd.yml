@@ -192,7 +192,7 @@ jobs:
 
       - name: Health Check
         run: |
-          curl -f http://${{ secrets.AZURE_VM_HOST_HOST }}:5001/health || exit 1
+          curl -f http://${{ secrets.AZURE_VM_HOST }}:5001/health || exit 1
 
   # Stage 6: Deploy to Production (with manual approval)
   deploy-production:
@@ -202,7 +202,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment:
       name: production
-      url: http://${{ secrets.AZURE_VM_HOST_HOST }}:5000
+      url: http://${{ secrets.AZURE_VM_HOST }}:5000
     steps:
       - name: Deploy to Azure Production
         uses: appleboy/ssh-action@v1.0.0
@@ -239,7 +239,7 @@ jobs:
       - name: Health Check
         id: health_check
         run: |
-          curl -f http://${{ secrets.AZURE_VM_HOST_HOST }}:5000/health || exit 1
+          curl -f http://${{ secrets.AZURE_VM_HOST }}:5000/health || exit 1
 
       - name: Rollback on Failure
         if: failure() && steps.health_check.outcome == 'failure'

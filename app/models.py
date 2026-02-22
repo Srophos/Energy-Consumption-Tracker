@@ -80,18 +80,21 @@ def get_monthly_entries(db_path, month, year):
 def get_current_rate(db_path):
     """Get the current billing rate."""
     with closing(get_db_connection(db_path)) as conn:
-        rate = conn.execute(
-            "SELECT rate_per_kwh FROM billing_rates ORDER BY effective_date DESC LIMIT 1"
-        ).fetchone()
+        row = conn.execute("""
+            SELECT rate_per_kwh
+            FROM billing_rates
+            ORDER BY effective_date DESC, rowid DESC
+            LIMIT 1
+        """).fetchone()
 
-    return rate["rate_per_kwh"] if rate else 7.5
+    return row["rate_per_kwh"] if row else 7.5
 
 
 def update_billing_rate(db_path, new_rate):
     """Update the billing rate."""
     with closing(get_db_connection(db_path)) as conn:
-        conn.execute(
-            "INSERT INTO billing_rates (rate_per_kwh, effective_date) VALUES (?, ?)",
-            (new_rate, datetime.now().strftime("%Y-%m-%d")),
-        )
+        conn.execute("""
+            INSERT INTO billing_rates (rate_per_kwh, effective_date)
+            VALUES (?, ?)
+        """, (float(new_rate), datetime.now().isoformat()))
         conn.commit()

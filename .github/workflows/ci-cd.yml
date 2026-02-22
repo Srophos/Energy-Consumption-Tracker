@@ -12,7 +12,7 @@ on:
       - develop
 
 env:
-  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/energy-tracker
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/ect
   PYTHON_VERSION: '3.11'
 
 jobs:
@@ -171,12 +171,12 @@ jobs:
             docker pull ${{ env.DOCKER_IMAGE }}:develop
             
             # Stop and remove old container
-            docker stop energy-tracker-staging || true
-            docker rm energy-tracker-staging || true
+            docker stop ect-staging || true
+            docker rm ect-staging || true
             
             # Run new container
             docker run -d \
-              --name energy-tracker-staging \
+              --name ect-staging \
               -p 5001:5000 \
               -e FLASK_ENV=development \
               -e DEBUG=True \
@@ -216,12 +216,12 @@ jobs:
             docker tag ${{ env.DOCKER_IMAGE }}:main ${{ env.DOCKER_IMAGE }}:main-backup || true
             
             # Stop and remove old container
-            docker stop energy-tracker-production || true
-            docker rm energy-tracker-production || true
+            docker stop ect-production || true
+            docker rm ect-production || true
             
             # Run new container
             docker run -d \
-              --name energy-tracker-production \
+              --name ect-production \
               -p 5000:5000 \
               -e FLASK_ENV=production \
               -e DEBUG=False \
@@ -248,12 +248,12 @@ jobs:
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
             # Stop failed container
-            docker stop energy-tracker-production || true
-            docker rm energy-tracker-production || true
+            docker stop ect-production || true
+            docker rm ect-production || true
             
             # Restore from backup
             docker run -d \
-              --name energy-tracker-production \
+              --name ect-production \
               -p 5000:5000 \
               -e FLASK_ENV=production \
               -e DEBUG=False \

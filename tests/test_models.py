@@ -1,15 +1,11 @@
 """Unit tests for database models."""
 
-import unittest
 import os
 import tempfile
-from app.models import (
-    init_db,
-    add_energy_entry,
-    get_monthly_entries,
-    get_current_rate,
-    update_billing_rate,
-)
+import unittest
+
+from app.models import (add_energy_entry, get_current_rate,
+                        get_monthly_entries, init_db, update_billing_rate)
 
 
 class ModelsTestCase(unittest.TestCase):

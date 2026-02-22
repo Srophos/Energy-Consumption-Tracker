@@ -1,14 +1,10 @@
 """Unit tests for utility calculations."""
 
 import unittest
-from app.utils import (
-    calculate_energy_kwh,
-    calculate_monthly_bill,
-    format_currency,
-    validate_date,
-    validate_positive_number,
-    get_month_name,
-)
+
+from app.utils import (calculate_energy_kwh, calculate_monthly_bill,
+                       format_currency, get_month_name, validate_date,
+                       validate_positive_number)
 
 
 class CalculationsTestCase(unittest.TestCase):

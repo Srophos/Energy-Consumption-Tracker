@@ -1,7 +1,9 @@
 """Flask application factory for Energy Tracker."""
 
 import os
+
 from flask import Flask
+
 from .models import init_db
 
 

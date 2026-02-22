@@ -1,15 +1,14 @@
 """Application routes for Energy Tracker."""
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from datetime import datetime
-from .models import add_energy_entry, get_monthly_entries, get_current_rate, update_billing_rate
-from .utils import (
-    calculate_monthly_bill,
-    format_currency,
-    validate_date,
-    validate_positive_number,
-    get_month_name,
-)
+
+from flask import (Blueprint, current_app, flash, redirect, render_template,
+                   request, url_for)
+
+from .models import (add_energy_entry, get_current_rate, get_monthly_entries,
+                     update_billing_rate)
+from .utils import (calculate_monthly_bill, format_currency, get_month_name,
+                    validate_date, validate_positive_number)
 
 bp = Blueprint("main", __name__)
 

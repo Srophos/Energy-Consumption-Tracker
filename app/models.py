@@ -1,8 +1,8 @@
 """Database models and initialization for Energy Tracker."""
 
 import sqlite3
-from datetime import datetime
 from contextlib import closing
+from datetime import datetime
 
 
 def get_db_connection(db_path):

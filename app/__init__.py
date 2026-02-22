@@ -1,5 +1,4 @@
 """Flask application factory for Energy Tracker."""
-
 import os
 
 from flask import Flask
@@ -9,10 +8,14 @@ from .models import init_db
 
 def create_app(config=None):
     """Create and configure the Flask application."""
-    app = Flask(__name__, template_folder="../templates", static_folder="../static")
+    app = Flask(
+        __name__, template_folder="../templates", static_folder="../static"
+    )
 
     # Default configuration
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
+    app.config["SECRET_KEY"] = os.environ.get(
+        "SECRET_KEY", "dev-secret-key-change-in-production"
+    )
     app.config["DATABASE"] = os.environ.get("DATABASE", "energy_tracker.db")
     app.config["DEBUG"] = os.environ.get("FLASK_ENV") == "development"
 

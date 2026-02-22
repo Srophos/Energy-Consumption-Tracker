@@ -1,5 +1,4 @@
 """Database models and initialization for Energy Tracker."""
-
 import sqlite3
 from contextlib import closing
 from datetime import datetime
@@ -15,7 +14,8 @@ def get_db_connection(db_path):
 def init_db(db_path):
     """Initialize the database schema."""
     with closing(get_db_connection(db_path)) as conn:
-        conn.executescript("""
+        conn.executescript(
+            """
             CREATE TABLE IF NOT EXISTS energy_entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
@@ -25,16 +25,17 @@ def init_db(db_path):
                 energy_kwh REAL NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            
+
             CREATE TABLE IF NOT EXISTS billing_rates (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rate_per_kwh REAL NOT NULL,
                 effective_date TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            
+
             CREATE INDEX IF NOT EXISTS idx_entry_date ON energy_entries(date);
-        """)
+        """
+        )
 
         # Insert default billing rate if not exists
         cursor = conn.execute("SELECT COUNT(*) FROM billing_rates")
@@ -53,8 +54,8 @@ def add_energy_entry(db_path, date, appliance, power_watts, hours_used):
 
     with closing(get_db_connection(db_path)) as conn:
         conn.execute(
-            """INSERT INTO energy_entries 
-               (date, appliance, power_watts, hours_used, energy_kwh) 
+            """INSERT INTO energy_entries
+               (date, appliance, power_watts, hours_used, energy_kwh)
                VALUES (?, ?, ?, ?, ?)""",
             (date, appliance, power_watts, hours_used, energy_kwh),
         )
@@ -67,7 +68,7 @@ def get_monthly_entries(db_path, month, year):
     """Get all energy entries for a specific month."""
     with closing(get_db_connection(db_path)) as conn:
         entries = conn.execute(
-            """SELECT * FROM energy_entries 
+            """SELECT * FROM energy_entries
                WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?
                ORDER BY date DESC""",
             (f"{month:02d}", str(year)),

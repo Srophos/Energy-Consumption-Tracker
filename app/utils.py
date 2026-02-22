@@ -1,5 +1,4 @@
 """Helper utility functions for Energy Tracker."""
-
 from datetime import datetime
 
 
@@ -100,4 +99,8 @@ def get_month_name(month_number):
         "November",
         "December",
     ]
-    return months[month_number - 1] if 1 <= month_number <= 12 else "Unknown"
+    return (
+        months[month_number - 1]
+        if 1 <= month_number <= 12
+        else "Unknown"
+    )

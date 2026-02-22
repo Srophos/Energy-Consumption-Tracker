@@ -1,5 +1,4 @@
 """Unit tests for application routes."""
-
 import os
 import tempfile
 import unittest
@@ -46,21 +45,36 @@ class RoutesTestCase(unittest.TestCase):
 
     def test_daily_entry_post_invalid_date(self):
         """Test POST with invalid date."""
-        data = {"date": "invalid-date", "appliance": "AC", "power_watts": "1500", "hours_used": "8"}
+        data = {
+            "date": "invalid-date",
+            "appliance": "AC",
+            "power_watts": "1500",
+            "hours_used": "8",
+        }
         response = self.client.post("/", data=data)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"valid date", response.data)
 
     def test_daily_entry_post_negative_power(self):
         """Test POST with negative power value."""
-        data = {"date": "2024-01-15", "appliance": "AC", "power_watts": "-100", "hours_used": "8"}
+        data = {
+            "date": "2024-01-15",
+            "appliance": "AC",
+            "power_watts": "-100",
+            "hours_used": "8",
+        }
         response = self.client.post("/", data=data)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"greater than 0", response.data)
 
     def test_daily_entry_post_empty_appliance(self):
         """Test POST with empty appliance name."""
-        data = {"date": "2024-01-15", "appliance": "   ", "power_watts": "1500", "hours_used": "8"}
+        data = {
+            "date": "2024-01-15",
+            "appliance": "   ",
+            "power_watts": "1500",
+            "hours_used": "8",
+        }
         response = self.client.post("/", data=data)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"appliance name", response.data)

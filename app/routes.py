@@ -1,14 +1,29 @@
 """Application routes for Energy Tracker."""
-
 from datetime import datetime
 
-from flask import (Blueprint, current_app, flash, redirect, render_template,
-                   request, url_for)
+from flask import (
+    Blueprint,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 
-from .models import (add_energy_entry, get_current_rate, get_monthly_entries,
-                     update_billing_rate)
-from .utils import (calculate_monthly_bill, format_currency, get_month_name,
-                    validate_date, validate_positive_number)
+from .models import (
+    add_energy_entry,
+    get_current_rate,
+    get_monthly_entries,
+    update_billing_rate,
+)
+from .utils import (
+    calculate_monthly_bill,
+    format_currency,
+    get_month_name,
+    validate_date,
+    validate_positive_number,
+)
 
 bp = Blueprint("main", __name__)
 
@@ -32,11 +47,15 @@ def daily_entry():
         if not appliance or not appliance.strip():
             errors.append("Please provide an appliance name")
 
-        is_valid_power, power_error = validate_positive_number(power_watts, "Power rating")
+        is_valid_power, power_error = validate_positive_number(
+            power_watts, "Power rating"
+        )
         if not is_valid_power:
             errors.append(power_error)
 
-        is_valid_hours, hours_error = validate_positive_number(hours_used, "Hours used")
+        is_valid_hours, hours_error = validate_positive_number(
+            hours_used, "Hours used"
+        )
         if not is_valid_hours:
             errors.append(hours_error)
 
@@ -60,11 +79,20 @@ def daily_entry():
                 int(float(power_watts)),
                 float(hours_used),
             )
-            flash(f"Entry added successfully! Energy consumed: {energy_kwh:.2f} kWh", "success")
+            flash(
+                f"Entry added successfully! Energy consumed: {energy_kwh:.2f} kWh",
+                "success",
+            )
 
             # Redirect to dashboard for the month of the entry
             entry_date = datetime.strptime(date, "%Y-%m-%d")
-            return redirect(url_for("main.dashboard", month=entry_date.month, year=entry_date.year))
+            return redirect(
+                url_for(
+                    "main.dashboard",
+                    month=entry_date.month,
+                    year=entry_date.year,
+                )
+            )
         except Exception as e:
             flash(f"Error adding entry: {str(e)}", "error")
             return render_template("daily_entry.html")
@@ -89,14 +117,18 @@ def dashboard():
         year = now.year
 
     # Get entries for the month
-    entries = get_monthly_entries(current_app.config["DATABASE"], month, year)
+    entries = get_monthly_entries(
+        current_app.config["DATABASE"], month, year
+    )
 
     # Get current billing rate
     rate = get_current_rate(current_app.config["DATABASE"])
 
     # Calculate total bill
     total_bill = calculate_monthly_bill(entries, rate) if entries else 0
-    total_kwh = sum(entry["energy_kwh"] for entry in entries) if entries else 0
+    total_kwh = (
+        sum(entry["energy_kwh"] for entry in entries) if entries else 0
+    )
 
     # Format data for display
     month_name = get_month_name(month)

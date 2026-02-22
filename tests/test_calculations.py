@@ -1,10 +1,14 @@
 """Unit tests for utility calculations."""
-
 import unittest
 
-from app.utils import (calculate_energy_kwh, calculate_monthly_bill,
-                       format_currency, get_month_name, validate_date,
-                       validate_positive_number)
+from app.utils import (
+    calculate_energy_kwh,
+    calculate_monthly_bill,
+    format_currency,
+    get_month_name,
+    validate_date,
+    validate_positive_number,
+)
 
 
 class CalculationsTestCase(unittest.TestCase):
@@ -26,7 +30,11 @@ class CalculationsTestCase(unittest.TestCase):
 
     def test_calculate_monthly_bill(self):
         """Test monthly bill calculation."""
-        entries = [{"energy_kwh": 10.0}, {"energy_kwh": 5.0}, {"energy_kwh": 3.5}]
+        entries = [
+            {"energy_kwh": 10.0},
+            {"energy_kwh": 5.0},
+            {"energy_kwh": 3.5},
+        ]
         rate = 7.5
 
         # Total: 18.5 kWh * 7.5 = 138.75

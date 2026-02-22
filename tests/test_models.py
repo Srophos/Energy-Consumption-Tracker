@@ -1,11 +1,16 @@
 """Unit tests for database models."""
-
 import os
+import sqlite3
 import tempfile
 import unittest
 
-from app.models import (add_energy_entry, get_current_rate,
-                        get_monthly_entries, init_db, update_billing_rate)
+from app.models import (
+    add_energy_entry,
+    get_current_rate,
+    get_monthly_entries,
+    init_db,
+    update_billing_rate,
+)
 
 
 class ModelsTestCase(unittest.TestCase):
@@ -23,8 +28,6 @@ class ModelsTestCase(unittest.TestCase):
 
     def test_init_db_creates_tables(self):
         """Test that database initialization creates required tables."""
-        import sqlite3
-
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
@@ -35,7 +38,9 @@ class ModelsTestCase(unittest.TestCase):
         self.assertIsNotNone(cursor.fetchone())
 
         # Check billing_rates table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='billing_rates'")
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='billing_rates'"
+        )
         self.assertIsNotNone(cursor.fetchone())
 
         conn.close()
@@ -48,7 +53,9 @@ class ModelsTestCase(unittest.TestCase):
 
     def test_add_energy_entry(self):
         """Test adding an energy entry."""
-        energy_kwh = add_energy_entry(self.db_path, "2024-01-15", "Air Conditioner", 1500, 8.0)
+        energy_kwh = add_energy_entry(
+            self.db_path, "2024-01-15", "Air Conditioner", 1500, 8.0
+        )
 
         # Energy should be (1500W * 8h) / 1000 = 12 kWh
         self.assertEqual(energy_kwh, 12.0)
@@ -106,15 +113,21 @@ class ModelsTestCase(unittest.TestCase):
     def test_energy_calculation_accuracy(self):
         """Test that energy calculations are accurate."""
         # 2000W for 5 hours = 10 kWh
-        energy = add_energy_entry(self.db_path, "2024-01-15", "Heater", 2000, 5)
+        energy = add_energy_entry(
+            self.db_path, "2024-01-15", "Heater", 2000, 5
+        )
         self.assertEqual(energy, 10.0)
 
         # 500W for 0.5 hours = 0.25 kWh
-        energy = add_energy_entry(self.db_path, "2024-01-16", "Microwave", 500, 0.5)
+        energy = add_energy_entry(
+            self.db_path, "2024-01-16", "Microwave", 500, 0.5
+        )
         self.assertEqual(energy, 0.25)
 
         # 100W for 24 hours = 2.4 kWh
-        energy = add_energy_entry(self.db_path, "2024-01-17", "Light", 100, 24)
+        energy = add_energy_entry(
+            self.db_path, "2024-01-17", "Light", 100, 24
+        )
         self.assertEqual(energy, 2.4)
 
 

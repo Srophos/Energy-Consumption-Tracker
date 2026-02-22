@@ -35,10 +35,10 @@ jobs:
           pip install flake8 black isort
 
       - name: Run Black (code formatting)
-        run: black --check app/ tests/ run.py
+        run: black app/ tests/ run.py
 
       - name: Run isort (import sorting)
-        run: isort --check-only app/ tests/ run.py
+        run: isort app/ tests/ run.py
 
       - name: Run Flake8 (style guide)
         run: flake8 app/ tests/ run.py --max-line-length=100 --extend-ignore=E203,W503

@@ -210,7 +210,7 @@ jobs:
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
             # Pull latest image
-            docker pull ${{ env.DOCKER_IMAGE }}:main
+            docker pull ${{ env.DOCKER_IMAGE }}:latest
             
             # Backup current container (for rollback)
             docker tag ${{ env.DOCKER_IMAGE }}:main ${{ env.DOCKER_IMAGE }}:main-backup || true
@@ -229,7 +229,7 @@ jobs:
               -e PORT=5000 \
               -v /home/ubuntu/data/production:/app/data \
               --restart unless-stopped \
-              ${{ env.DOCKER_IMAGE }}:main
+              ${{ env.DOCKER_IMAGE }}:latest
             
             # Wait for container to be healthy
             sleep 10

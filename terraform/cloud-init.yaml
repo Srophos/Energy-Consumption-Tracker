@@ -1,0 +1,98 @@
+#cloud-config
+
+# Energy Tracker VM Setup
+# This script runs automatically when the VM is created
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - git
+  - vim
+  - htop
+  - net-tools
+
+# Install Docker
+runcmd:
+  # Update system
+  - apt-get update
+  - apt-get upgrade -y
+  
+  # Install Docker
+  - curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+  - sh /tmp/get-docker.sh
+  - rm /tmp/get-docker.sh
+  
+  # Add user to docker group
+  - usermod -aG docker ${admin_username}
+  
+  # Enable Docker service
+  - systemctl enable docker
+  - systemctl start docker
+  
+  # Create data directories
+  - mkdir -p /home/${admin_username}/data/staging
+  - mkdir -p /home/${admin_username}/data/production
+  - chown -R ${admin_username}:${admin_username} /home/${admin_username}/data
+  - chmod -R 755 /home/${admin_username}/data
+  
+  # Install Docker Compose
+  - curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  - chmod +x /usr/local/bin/docker-compose
+  
+  # Configure firewall (ufw)
+  - ufw allow 22/tcp
+  - ufw allow 5000/tcp
+  - ufw allow 5001/tcp
+  - echo "y" | ufw enable
+  
+  # Set timezone
+  - timedatectl set-timezone UTC
+  
+  # Create a marker file to indicate setup is complete
+  - touch /home/${admin_username}/.vm-setup-complete
+  - chown ${admin_username}:${admin_username} /home/${admin_username}/.vm-setup-complete
+
+# Write helpful info
+write_files:
+  - path: /home/${admin_username}/README.txt
+    content: |
+      ════════════════════════════════════════════════════════
+      Energy Tracker VM - Setup Complete!
+      ════════════════════════════════════════════════════════
+      
+      This VM has been automatically configured with:
+      ✅ Docker Engine installed
+      ✅ Docker Compose installed
+      ✅ Data directories created
+      ✅ Firewall configured (ports 22, 5000, 5001)
+      ✅ User added to docker group
+      
+      Directories:
+      - ~/data/staging     (for staging environment)
+      - ~/data/production  (for production environment)
+      
+      Useful Commands:
+      - docker ps                 (list running containers)
+      - docker logs <container>   (view container logs)
+      - docker-compose up -d      (start services)
+      
+      GitHub Actions will deploy here automatically!
+      
+      Production:  http://<your-ip>:5000
+      Staging:     http://<your-ip>:5001
+      
+      ════════════════════════════════════════════════════════
+    owner: ${admin_username}:${admin_username}
+    permissions: '0644'
+
+# Final message
+final_message: |
+  ════════════════════════════════════════════════════════
+  Energy Tracker VM Setup Complete!
+  ════════════════════════════════════════════════════════
+  Docker installed: $(docker --version)
+  Docker Compose installed: $(docker-compose --version)
+  Setup time: $UPTIME seconds
+  ════════════════════════════════════════════════════════

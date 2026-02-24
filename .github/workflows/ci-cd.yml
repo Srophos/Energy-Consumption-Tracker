@@ -1,118 +1,25 @@
-name: Complete CI/CD Pipeline with Infrastructure
+name: CI/CD Pipeline
 
 on:
   push:
     branches:
       - main
-      - Development
+      - develop
       - 'feature/**'
   pull_request:
     branches:
       - main
-      - Development
-  workflow_dispatch:  # Allow manual trigger
+      - develop
 
 env:
-  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/ect
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/energy-tracker
   PYTHON_VERSION: '3.11'
-  TERRAFORM_VERSION: '1.6.0'
-  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
 jobs:
-  # ============================================
-  # STAGE 0: Infrastructure Provisioning
-  # ============================================
-  infrastructure:
-    name: Provision Infrastructure
-    runs-on: ubuntu-latest
-    # Only run for main and Development branches
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/Development'
-    outputs:
-      vm_ip: ${{ steps.terraform_output.outputs.vm_ip }}
-      ssh_private_key: ${{ steps.terraform_output.outputs.ssh_key }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
-
-      - name: Terraform Init
-        working-directory: ./terraform
-        run: terraform init
-
-      - name: Terraform Plan
-        working-directory: ./terraform
-        run: terraform plan -out=tfplan
-
-      - name: Terraform Apply
-        working-directory: ./terraform
-        run: terraform apply -auto-approve tfplan
-
-      - name: Get Terraform Outputs
-        id: terraform_output
-        working-directory: ./terraform
-        run: |
-          echo "vm_ip=$(terraform output -raw vm_public_ip)" >> $GITHUB_OUTPUT
-          echo "ssh_key<<EOF" >> $GITHUB_OUTPUT
-          terraform output -raw ssh_private_key >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Wait for VM to be ready
-        run: |
-          echo "Waiting for VM to complete cloud-init setup..."
-          sleep 120  # Wait 2 minutes for cloud-init
-
-      - name: Verify VM is ready
-        run: |
-          echo "${{ steps.terraform_output.outputs.ssh_key }}" > /tmp/ssh_key.pem
-          chmod 600 /tmp/ssh_key.pem
-          
-          max_attempts=10
-          attempt=0
-          
-          while [ $attempt -lt $max_attempts ]; do
-            if ssh -i /tmp/ssh_key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-                azureuser@${{ steps.terraform_output.outputs.vm_ip }} \
-                "docker --version && echo 'VM is ready!'"; then
-              echo "✅ VM is ready!"
-              exit 0
-            fi
-            
-            attempt=$((attempt + 1))
-            echo "Attempt $attempt/$max_attempts failed. Waiting 30s..."
-            sleep 30
-          done
-          
-          echo "❌ VM not ready after $max_attempts attempts"
-          exit 1
-
-      - name: Infrastructure Summary
-        run: |
-          echo "════════════════════════════════════════════════════════"
-          echo "✅ Infrastructure Provisioned Successfully!"
-          echo "════════════════════════════════════════════════════════"
-          echo "VM IP: ${{ steps.terraform_output.outputs.vm_ip }}"
-          echo "Production URL: http://${{ steps.terraform_output.outputs.vm_ip }}:5000"
-          echo "Staging URL: http://${{ steps.terraform_output.outputs.vm_ip }}:5001"
-          echo "════════════════════════════════════════════════════════"
-
-  # ============================================
-  # STAGE 1: Code Linting
-  # ============================================
+  # Stage 1: Linting
   lint:
     name: Code Linting
     runs-on: ubuntu-latest
-    needs: infrastructure
-    if: always() && (needs.infrastructure.result == 'success' || github.ref == 'refs/heads/feature/*')
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -128,22 +35,19 @@ jobs:
           pip install flake8 black isort
 
       - name: Run Black (code formatting)
-        run: black app/ tests/ run.py
+        run: black --check app/ tests/ run.py
 
       - name: Run isort (import sorting)
-        run: isort app/ tests/ run.py
+        run: isort --check-only app/ tests/ run.py
 
       - name: Run Flake8 (style guide)
         run: flake8 app/ tests/ run.py --max-line-length=100 --extend-ignore=E203,W503
 
-  # ============================================
-  # STAGE 2: Security Scanning
-  # ============================================
+  # Stage 2: Security Scanning
   security:
     name: Security Scan
     runs-on: ubuntu-latest
     needs: lint
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -166,20 +70,18 @@ jobs:
         run: safety check --json || true
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         if: always()
         with:
           name: security-reports
-          path: bandit-report.json
+          path: |
+            bandit-report.json
 
-  # ============================================
-  # STAGE 3: Unit Tests
-  # ============================================
+  # Stage 3: Unit Tests
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: security
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -201,24 +103,23 @@ jobs:
 
       - name: Check coverage threshold
         run: |
-          coverage report --fail-under=80 || true
+          coverage report --fail-under=80
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         if: always()
         with:
           name: coverage-report
           path: htmlcov/
 
-  # ============================================
-  # STAGE 4 & 5: Build and Push Docker Image
-  # ============================================
+  # Stage 4 & 5: Build and Push Docker Image
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/Development'
-    
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -250,160 +151,135 @@ jobs:
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-  # ============================================
-  # STAGE 6: Deploy to Staging
-  # ============================================
+  # Stage 6: Deploy to Staging
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [infrastructure, build]
-    if: github.ref == 'refs/heads/Development'
+    needs: build
+    if: github.ref == 'refs/heads/develop'
     environment:
       name: staging
-    
+      url: http://${{ secrets.EC2_HOST }}:5001
     steps:
-      - name: Deploy to Azure VM Staging
+      - name: Deploy to EC2 Staging
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ needs.infrastructure.outputs.vm_ip }}
-          username: azureuser
-          key: ${{ needs.infrastructure.outputs.ssh_private_key }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "═══════════════════════════════════════"
-            echo "🚀 Deploying to Staging"
-            echo "═══════════════════════════════════════"
-            
             # Pull latest image
-            docker pull ${{ env.DOCKER_IMAGE }}:Development
+            docker pull ${{ env.DOCKER_IMAGE }}:develop
             
             # Stop and remove old container
-            docker stop ect-staging 2>/dev/null || true
-            docker rm ect-staging 2>/dev/null || true
+            docker stop energy-tracker-staging || true
+            docker rm energy-tracker-staging || true
             
             # Run new container
             docker run -d \
-              --name ect-staging \
+              --name energy-tracker-staging \
               -p 5001:5000 \
               -e FLASK_ENV=development \
               -e DEBUG=True \
               -e DATABASE=/app/data/staging.db \
               -e PORT=5000 \
-              -v ~/data/staging:/app/data \
+              -v /home/ubuntu/data/staging:/app/data \
               --restart unless-stopped \
-              ${{ env.DOCKER_IMAGE }}:Development
+              ${{ env.DOCKER_IMAGE }}:develop
             
-            # Wait and verify
-            sleep 15
-            docker ps | grep ect-staging
-            curl -f http://localhost:5001/health || exit 1
-            
-            echo "✅ Staging deployment successful!"
+            # Wait for container to be healthy
+            sleep 10
 
-  # ============================================
-  # STAGE 6: Deploy to Production
-  # ============================================
+      - name: Health Check
+        run: |
+          curl -f http://${{ secrets.EC2_HOST }}:5001/health || exit 1
+
+  # Stage 6: Deploy to Production (with manual approval)
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [infrastructure, build]
+    needs: build
     if: github.ref == 'refs/heads/main'
     environment:
       name: production
-    
+      url: http://${{ secrets.EC2_HOST }}:5000
     steps:
-      - name: Deploy to Azure VM Production
+      - name: Deploy to EC2 Production
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ needs.infrastructure.outputs.vm_ip }}
-          username: azureuser
-          key: ${{ needs.infrastructure.outputs.ssh_private_key }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "═══════════════════════════════════════"
-            echo "🚀 Deploying to Production"
-            echo "═══════════════════════════════════════"
-            
             # Pull latest image
             docker pull ${{ env.DOCKER_IMAGE }}:main
             
-            # Backup current
-            docker tag ${{ env.DOCKER_IMAGE }}:main ${{ env.DOCKER_IMAGE }}:main-backup 2>/dev/null || true
+            # Backup current container (for rollback)
+            docker tag ${{ env.DOCKER_IMAGE }}:main ${{ env.DOCKER_IMAGE }}:main-backup || true
             
             # Stop and remove old container
-            docker stop ect-production 2>/dev/null || true
-            docker rm ect-production 2>/dev/null || true
+            docker stop energy-tracker-production || true
+            docker rm energy-tracker-production || true
             
             # Run new container
             docker run -d \
-              --name ect-production \
+              --name energy-tracker-production \
               -p 5000:5000 \
               -e FLASK_ENV=production \
               -e DEBUG=False \
               -e DATABASE=/app/data/production.db \
               -e PORT=5000 \
-              -v ~/data/production:/app/data \
+              -v /home/ubuntu/data/production:/app/data \
               --restart unless-stopped \
               ${{ env.DOCKER_IMAGE }}:main
             
-            # Wait and verify
-            sleep 15
-            docker ps | grep ect-production
-            curl -f http://localhost:5000/health || exit 1
-            
-            echo "✅ Production deployment successful!"
+            # Wait for container to be healthy
+            sleep 10
+
+      - name: Health Check
+        id: health_check
+        run: |
+          curl -f http://${{ secrets.EC2_HOST }}:5000/health || exit 1
 
       - name: Rollback on Failure
-        if: failure()
+        if: failure() && steps.health_check.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ needs.infrastructure.outputs.vm_ip }}
-          username: azureuser
-          key: ${{ needs.infrastructure.outputs.ssh_private_key }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "⚠️ Rolling back..."
-            docker stop ect-production || true
-            docker rm ect-production || true
+            # Stop failed container
+            docker stop energy-tracker-production || true
+            docker rm energy-tracker-production || true
+            
+            # Restore from backup
             docker run -d \
-              --name ect-production \
+              --name energy-tracker-production \
               -p 5000:5000 \
               -e FLASK_ENV=production \
-              -v ~/data/production:/app/data \
+              -e DEBUG=False \
+              -e DATABASE=/app/data/production.db \
+              -e PORT=5000 \
+              -v /home/ubuntu/data/production:/app/data \
               --restart unless-stopped \
               ${{ env.DOCKER_IMAGE }}:main-backup
-            echo "✅ Rollback complete"
+            
+            echo "Deployment failed. Rolled back to previous version."
+            exit 1
 
-  # ============================================
-  # STAGE 7: Notification
-  # ============================================
+  # Stage 8: Notify on Completion
   notify:
     name: Notification
     runs-on: ubuntu-latest
-    needs: [infrastructure, deploy-staging, deploy-production]
+    needs: [deploy-staging, deploy-production]
     if: always()
-    
     steps:
-      - name: Deployment Summary
+      - name: Deployment Status
         run: |
-          echo "════════════════════════════════════════════════════════"
-          echo "📊 Deployment Summary"
-          echo "════════════════════════════════════════════════════════"
-          echo "Infrastructure: ${{ needs.infrastructure.result }}"
-          echo "Staging: ${{ needs.deploy-staging.result }}"
-          echo "Production: ${{ needs.deploy-production.result }}"
-          echo ""
-          
-          if [ "${{ needs.infrastructure.result }}" == "success" ]; then
-            echo "🌐 VM IP: ${{ needs.infrastructure.outputs.vm_ip }}"
-            echo "📱 Staging: http://${{ needs.infrastructure.outputs.vm_ip }}:5001"
-            echo "🚀 Production: http://${{ needs.infrastructure.outputs.vm_ip }}:5000"
-          fi
-          
-          echo "════════════════════════════════════════════════════════"
-          
-          # Determine overall status
-          if [[ "${{ needs.deploy-staging.result }}" == "failure" ]] || \
-             [[ "${{ needs.deploy-production.result }}" == "failure" ]]; then
+          if [ "${{ needs.deploy-staging.result }}" == "success" ] || [ "${{ needs.deploy-production.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
             echo "❌ Deployment failed!"
             exit 1
           fi
-          
-          echo "✅ All deployments successful!"

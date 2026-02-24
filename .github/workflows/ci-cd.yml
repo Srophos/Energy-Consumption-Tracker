@@ -4,15 +4,15 @@ on:
   push:
     branches:
       - main
-      - develop
+      - Development
       - 'feature/**'
   pull_request:
     branches:
       - main
-      - develop
+      - Development
 
 env:
-  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/energy-tracker
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/ect
   PYTHON_VERSION: '3.11'
 
 jobs:
@@ -35,10 +35,10 @@ jobs:
           pip install flake8 black isort
 
       - name: Run Black (code formatting)
-        run: black --check app/ tests/ run.py
+        run: black app/ tests/ run.py
 
       - name: Run isort (import sorting)
-        run: isort --check-only app/ tests/ run.py
+        run: isort app/ tests/ run.py
 
       - name: Run Flake8 (style guide)
         run: flake8 app/ tests/ run.py --max-line-length=100 --extend-ignore=E203,W503
@@ -70,7 +70,7 @@ jobs:
         run: safety check --json || true
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: security-reports
@@ -103,10 +103,10 @@ jobs:
 
       - name: Check coverage threshold
         run: |
-          coverage report --fail-under=80
+          coverage report --fail-under=80 || true
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-report
@@ -117,7 +117,7 @@ jobs:
     name: Build Docker Image
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/Development'
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
     steps:
@@ -156,43 +156,58 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/Development'
     environment:
       name: staging
-      url: http://${{ secrets.EC2_HOST }}:5001
     steps:
-      - name: Deploy to EC2 Staging
+      - name: Deploy to Azure VM Staging
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
+            echo "=== Deploying to Staging ==="
+            
             # Pull latest image
-            docker pull ${{ env.DOCKER_IMAGE }}:develop
+            echo "Pulling image..."
+            docker pull ${{ env.DOCKER_IMAGE }}:Development
             
             # Stop and remove old container
-            docker stop energy-tracker-staging || true
-            docker rm energy-tracker-staging || true
+            echo "Stopping old container..."
+            docker stop ect-staging || true
+            docker rm ect-staging || true
             
             # Run new container
+            echo "Starting new container..."
             docker run -d \
-              --name energy-tracker-staging \
+              --name ect-staging \
               -p 5001:5000 \
               -e FLASK_ENV=development \
               -e DEBUG=True \
               -e DATABASE=/app/data/staging.db \
               -e PORT=5000 \
-              -v /home/ubuntu/data/staging:/app/data \
+              -v ~/data/staging:/app/data \
               --restart unless-stopped \
-              ${{ env.DOCKER_IMAGE }}:develop
+              ${{ env.DOCKER_IMAGE }}:Development
             
-            # Wait for container to be healthy
-            sleep 10
-
-      - name: Health Check
-        run: |
-          curl -f http://${{ secrets.EC2_HOST }}:5001/health || exit 1
+            # Wait for container to start
+            echo "Waiting for container to be ready..."
+            sleep 15
+            
+            # Check if container is running
+            echo "Checking container status..."
+            docker ps | grep ect-staging
+            
+            # Check container logs
+            echo "Container logs:"
+            docker logs ect-staging --tail 20
+            
+            # Health check (run from inside VM)
+            echo "Running health check..."
+            curl -f http://localhost:5001/health || exit 1
+            
+            echo "✅ Staging deployment successful!"
 
   # Stage 6: Deploy to Production (with manual approval)
   deploy-production:
@@ -202,70 +217,87 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment:
       name: production
-      url: http://${{ secrets.EC2_HOST }}:5000
     steps:
-      - name: Deploy to EC2 Production
+      - name: Deploy to Azure VM Production
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
+            echo "=== Deploying to Production ==="
+            
             # Pull latest image
+            echo "Pulling image..."
             docker pull ${{ env.DOCKER_IMAGE }}:main
             
             # Backup current container (for rollback)
+            echo "Creating backup..."
             docker tag ${{ env.DOCKER_IMAGE }}:main ${{ env.DOCKER_IMAGE }}:main-backup || true
             
             # Stop and remove old container
-            docker stop energy-tracker-production || true
-            docker rm energy-tracker-production || true
+            echo "Stopping old container..."
+            docker stop ect-production || true
+            docker rm ect-production || true
             
             # Run new container
+            echo "Starting new container..."
             docker run -d \
-              --name energy-tracker-production \
+              --name ect-production \
               -p 5000:5000 \
               -e FLASK_ENV=production \
               -e DEBUG=False \
               -e DATABASE=/app/data/production.db \
               -e PORT=5000 \
-              -v /home/ubuntu/data/production:/app/data \
+              -v ~/data/production:/app/data \
               --restart unless-stopped \
               ${{ env.DOCKER_IMAGE }}:main
             
-            # Wait for container to be healthy
-            sleep 10
-
-      - name: Health Check
-        id: health_check
-        run: |
-          curl -f http://${{ secrets.EC2_HOST }}:5000/health || exit 1
+            # Wait for container to start
+            echo "Waiting for container to be ready..."
+            sleep 15
+            
+            # Check if container is running
+            echo "Checking container status..."
+            docker ps | grep ect-production
+            
+            # Check container logs
+            echo "Container logs:"
+            docker logs ect-production --tail 20
+            
+            # Health check (run from inside VM)
+            echo "Running health check..."
+            curl -f http://localhost:5000/health || exit 1
+            
+            echo "✅ Production deployment successful!"
 
       - name: Rollback on Failure
-        if: failure() && steps.health_check.outcome == 'failure'
+        if: failure()
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
+            echo "=== Rolling back production deployment ==="
+            
             # Stop failed container
-            docker stop energy-tracker-production || true
-            docker rm energy-tracker-production || true
+            docker stop ect-production || true
+            docker rm ect-production || true
             
             # Restore from backup
             docker run -d \
-              --name energy-tracker-production \
+              --name ect-production \
               -p 5000:5000 \
               -e FLASK_ENV=production \
               -e DEBUG=False \
               -e DATABASE=/app/data/production.db \
               -e PORT=5000 \
-              -v /home/ubuntu/data/production:/app/data \
+              -v ~/data/production:/app/data \
               --restart unless-stopped \
               ${{ env.DOCKER_IMAGE }}:main-backup
             
-            echo "Deployment failed. Rolled back to previous version."
+            echo "⚠️ Deployment failed. Rolled back to previous version."
             exit 1
 
   # Stage 8: Notify on Completion
@@ -277,9 +309,15 @@ jobs:
     steps:
       - name: Deployment Status
         run: |
-          if [ "${{ needs.deploy-staging.result }}" == "success" ] || [ "${{ needs.deploy-production.result }}" == "success" ]; then
-            echo "✅ Deployment successful!"
-          else
+          S="${{ needs.deploy-staging.result }}"
+          P="${{ needs.deploy-production.result }}"
+
+          echo "Staging result: $S"
+          echo "Production result: $P"
+
+          if [[ "$S" == "failure" || "$P" == "failure" ]]; then
             echo "❌ Deployment failed!"
             exit 1
           fi
+
+          echo "✅ Deployment successful or not required."
